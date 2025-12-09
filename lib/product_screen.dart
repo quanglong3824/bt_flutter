@@ -16,6 +16,113 @@ class _ProductScreenState extends State<ProductScreen> {
   final DatabaseReference _dbRef = FirebaseDatabase.instance.ref('sanpham');
 
   String? _selectedKey;
+  List<String> _existingMaSP = []; // Danh sách mã SP đã tồn tại
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExistingMaSP();
+  }
+
+  // Load danh sách mã SP để kiểm tra trùng
+  void _loadExistingMaSP() {
+    _dbRef.onValue.listen((event) {
+      final data = event.snapshot.value;
+      if (data != null) {
+        final Map<dynamic, dynamic> products = data as Map;
+        _existingMaSP = products.entries
+            .map((e) => (e.value as Map)['maSP'].toString())
+            .toList();
+      } else {
+        _existingMaSP = [];
+      }
+    });
+  }
+
+  // Kiểm tra null/empty
+  String? _validateNotEmpty(String? value, String fieldName) {
+    if (value == null || value.trim().isEmpty) {
+      return '$fieldName không được để trống!';
+    }
+    return null;
+  }
+
+  // Kiểm tra số lượng phải là số dương
+  String? _validateSoLuong(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Số lượng không được để trống!';
+    }
+    final soLuong = int.tryParse(value);
+    if (soLuong == null) {
+      return 'Số lượng phải là số!';
+    }
+    if (soLuong < 0) {
+      return 'Số lượng không được âm!';
+    }
+    return null;
+  }
+
+  // Kiểm tra trùng mã SP
+  String? _validateMaSPTrung(String maSP) {
+    // Nếu đang edit, bỏ qua mã SP hiện tại
+    if (_selectedKey != null) {
+      return null; // Cho phép giữ nguyên mã khi cập nhật
+    }
+    if (_existingMaSP.contains(maSP.trim())) {
+      return 'Mã sản phẩm đã tồn tại!';
+    }
+    return null;
+  }
+
+  // Kiểm tra mã SP hợp lệ (chỉ chứa chữ và số)
+  String? _validateMaSPFormat(String? value) {
+    if (value == null || value.trim().isEmpty) {
+      return 'Mã SP không được để trống!';
+    }
+    final regex = RegExp(r'^[a-zA-Z0-9]+$');
+    if (!regex.hasMatch(value.trim())) {
+      return 'Mã SP chỉ được chứa chữ và số!';
+    }
+    return null;
+  }
+
+  // Validate tất cả các trường
+  bool _validateAll() {
+    final errors = <String>[];
+
+    // Kiểm tra null/empty
+    final maSPError = _validateNotEmpty(_maSPController.text, 'Mã SP');
+    if (maSPError != null) errors.add(maSPError);
+
+    final tenSPError = _validateNotEmpty(_tenSPController.text, 'Tên SP');
+    if (tenSPError != null) errors.add(tenSPError);
+
+    final soLuongError = _validateSoLuong(_soLuongController.text);
+    if (soLuongError != null) errors.add(soLuongError);
+
+    // Kiểm tra format mã SP
+    if (maSPError == null) {
+      final formatError = _validateMaSPFormat(_maSPController.text);
+      if (formatError != null) errors.add(formatError);
+    }
+
+    // Kiểm tra trùng mã SP (chỉ khi thêm mới)
+    if (maSPError == null && _selectedKey == null) {
+      final trungError = _validateMaSPTrung(_maSPController.text);
+      if (trungError != null) errors.add(trungError);
+    }
+
+    if (errors.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(errors.first),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
+    }
+    return true;
+  }
 
   @override
   void dispose() {
@@ -34,25 +141,41 @@ class _ProductScreenState extends State<ProductScreen> {
   }
 
   Future<void> _themSanPham() async {
-    if (_maSPController.text.isEmpty ||
-        _tenSPController.text.isEmpty ||
-        _soLuongController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng nhập đầy đủ thông tin!')),
+    if (!_validateAll()) return;
+
+    // Kiểm tra trùng mã SP một lần nữa trước khi thêm
+    final snapshot = await _dbRef.get();
+    if (snapshot.exists) {
+      final data = snapshot.value as Map;
+      final isDuplicate = data.values.any(
+        (v) => (v as Map)['maSP'].toString().trim() == _maSPController.text.trim(),
       );
-      return;
+      if (isDuplicate) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Mã sản phẩm đã tồn tại!'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
     }
 
     final newRef = _dbRef.push();
     await newRef.set({
-      'maSP': _maSPController.text,
-      'tenSP': _tenSPController.text,
+      'maSP': _maSPController.text.trim(),
+      'tenSP': _tenSPController.text.trim(),
       'soLuong': int.tryParse(_soLuongController.text) ?? 0,
     });
     _clearForm();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Thêm sản phẩm thành công!')),
+        const SnackBar(
+          content: Text('Thêm sản phẩm thành công!'),
+          backgroundColor: Colors.green,
+        ),
       );
     }
   }
@@ -60,29 +183,49 @@ class _ProductScreenState extends State<ProductScreen> {
   Future<void> _capNhatSanPham() async {
     if (_selectedKey == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng chọn sản phẩm để cập nhật!')),
+        const SnackBar(
+          content: Text('Vui lòng chọn sản phẩm để cập nhật!'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
 
-    if (_maSPController.text.isEmpty ||
-        _tenSPController.text.isEmpty ||
-        _soLuongController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng nhập đầy đủ thông tin!')),
-      );
-      return;
+    if (!_validateAll()) return;
+
+    // Kiểm tra chéo: mã SP mới có trùng với SP khác không
+    final snapshot = await _dbRef.get();
+    if (snapshot.exists) {
+      final data = snapshot.value as Map;
+      final isDuplicate = data.entries.any((entry) {
+        if (entry.key.toString() == _selectedKey) return false; // Bỏ qua chính nó
+        return (entry.value as Map)['maSP'].toString().trim() == _maSPController.text.trim();
+      });
+      if (isDuplicate) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Mã sản phẩm đã tồn tại ở sản phẩm khác!'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
     }
 
     await _dbRef.child(_selectedKey!).update({
-      'maSP': _maSPController.text,
-      'tenSP': _tenSPController.text,
+      'maSP': _maSPController.text.trim(),
+      'tenSP': _tenSPController.text.trim(),
       'soLuong': int.tryParse(_soLuongController.text) ?? 0,
     });
     _clearForm();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Cập nhật sản phẩm thành công!')),
+        const SnackBar(
+          content: Text('Cập nhật sản phẩm thành công!'),
+          backgroundColor: Colors.green,
+        ),
       );
     }
   }
@@ -90,16 +233,44 @@ class _ProductScreenState extends State<ProductScreen> {
   Future<void> _xoaSanPham() async {
     if (_selectedKey == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng chọn sản phẩm để xóa!')),
+        const SnackBar(
+          content: Text('Vui lòng chọn sản phẩm để xóa!'),
+          backgroundColor: Colors.orange,
+        ),
       );
       return;
     }
+
+    // Hiển thị dialog xác nhận trước khi xóa
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xác nhận xóa'),
+        content: Text('Bạn có chắc muốn xóa sản phẩm "${_tenSPController.text}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Xóa'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
 
     await _dbRef.child(_selectedKey!).remove();
     _clearForm();
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Xóa sản phẩm thành công!')),
+        const SnackBar(
+          content: Text('Xóa sản phẩm thành công!'),
+          backgroundColor: Colors.green,
+        ),
       );
     }
   }
