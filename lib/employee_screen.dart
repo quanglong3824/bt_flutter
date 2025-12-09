@@ -9,289 +9,232 @@ class EmployeeScreen extends StatefulWidget {
 }
 
 class _EmployeeScreenState extends State<EmployeeScreen> {
-  final DatabaseReference _employeesRef =
-      FirebaseDatabase.instance.ref('employees');
-  List<Map<String, dynamic>> employees = [];
+  final _formKey = GlobalKey<FormState>();
+  final _maNVController = TextEditingController();
+  final _hoTenController = TextEditingController();
+  final _luongCBController = TextEditingController();
+  final _heSoController = TextEditingController();
+  final _phuCapController = TextEditingController();
+
+  final DatabaseReference _dbRef = FirebaseDatabase.instance.ref('nhanvien');
+  
+  String? _editingKey;
+  bool _isEditing = false;
 
   @override
-  void initState() {
-    super.initState();
-    _loadEmployees();
+  void dispose() {
+    _maNVController.dispose();
+    _hoTenController.dispose();
+    _luongCBController.dispose();
+    _heSoController.dispose();
+    _phuCapController.dispose();
+    super.dispose();
   }
 
-  void _loadEmployees() {
-    _employeesRef.onValue.listen((event) {
-      final data = event.snapshot.value;
-      if (data != null && data is Map) {
-        setState(() {
-          employees = data.entries.map((entry) {
-            final value = entry.value as Map;
-            return {
-              'key': entry.key,
-              'id': value['id'] ?? '',
-              'name': value['name'] ?? '',
-              'salary': (value['salary'] ?? 0).toDouble(),
-            };
-          }).toList();
-        });
-      } else {
-        setState(() {
-          employees = [];
-        });
+  void _clearForm() {
+    _maNVController.clear();
+    _hoTenController.clear();
+    _luongCBController.clear();
+    _heSoController.clear();
+    _phuCapController.clear();
+    _editingKey = null;
+    _isEditing = false;
+  }
+
+  double _tinhLuongThucLinh(double luongCB, double heSo, double phuCap) {
+    return luongCB * heSo + phuCap;
+  }
+
+  Future<void> _themNhanVien() async {
+    if (_formKey.currentState!.validate()) {
+      final newRef = _dbRef.push();
+      await newRef.set({
+        'maNV': _maNVController.text,
+        'hoTen': _hoTenController.text,
+        'luongCB': double.parse(_luongCBController.text),
+        'heSo': double.parse(_heSoController.text),
+        'phuCap': double.parse(_phuCapController.text),
+      });
+      _clearForm();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Thêm nhân viên thành công!')),
+        );
       }
+    }
+  }
+
+  Future<void> _capNhatNhanVien() async {
+    if (_formKey.currentState!.validate() && _editingKey != null) {
+      await _dbRef.child(_editingKey!).update({
+        'maNV': _maNVController.text,
+        'hoTen': _hoTenController.text,
+        'luongCB': double.parse(_luongCBController.text),
+        'heSo': double.parse(_heSoController.text),
+        'phuCap': double.parse(_phuCapController.text),
+      });
+      _clearForm();
+      setState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cập nhật thành công!')),
+        );
+      }
+    }
+  }
+
+  Future<void> _xoaNhanVien(String key) async {
+    await _dbRef.child(key).remove();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Xóa nhân viên thành công!')),
+      );
+    }
+  }
+
+  void _chonSuaNhanVien(String key, Map data) {
+    setState(() {
+      _editingKey = key;
+      _isEditing = true;
+      _maNVController.text = data['maNV'].toString();
+      _hoTenController.text = data['hoTen'].toString();
+      _luongCBController.text = data['luongCB'].toString();
+      _heSoController.text = data['heSo'].toString();
+      _phuCapController.text = data['phuCap'].toString();
     });
   }
 
-  void _showAddEmployeeDialog() {
-    final idController = TextEditingController();
-    final nameController = TextEditingController();
-    final salaryController = TextEditingController();
-    final coefficientController = TextEditingController();
-    final allowanceController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Thêm nhân viên',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: idController,
-                decoration: const InputDecoration(
-                  labelText: 'Mã NV',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Tên NV',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: salaryController,
-                decoration: const InputDecoration(
-                  labelText: 'Lương cơ bản',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: coefficientController,
-                decoration: const InputDecoration(
-                  labelText: 'Hệ số',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: allowanceController,
-                decoration: const InputDecoration(
-                  labelText: 'Phụ cấp',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Hủy'),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: () async {
-                      if (idController.text.isNotEmpty &&
-                          nameController.text.isNotEmpty &&
-                          salaryController.text.isNotEmpty) {
-                        double baseSalary =
-                            double.tryParse(salaryController.text) ?? 0;
-                        double coefficient =
-                            double.tryParse(coefficientController.text) ?? 1;
-                        double allowance =
-                            double.tryParse(allowanceController.text) ?? 0;
-                        double totalSalary = baseSalary * coefficient + allowance;
-
-                        await _employeesRef.push().set({
-                          'id': idController.text,
-                          'name': nameController.text,
-                          'salary': totalSalary,
-                        });
-                        
-                        if (mounted) Navigator.pop(context);
-                      }
-                    },
-                    child: const Text('Thêm'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _editEmployee(int index) {
-    final employee = employees[index];
-    final idController = TextEditingController(text: employee['id']);
-    final nameController = TextEditingController(text: employee['name']);
-    final salaryController =
-        TextEditingController(text: employee['salary'].toString());
-
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Sửa nhân viên',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: idController,
-                decoration: const InputDecoration(
-                  labelText: 'Mã NV',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Tên NV',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: salaryController,
-                decoration: const InputDecoration(
-                  labelText: 'Lương',
-                  border: OutlineInputBorder(),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Hủy'),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: () async {
-                      await _employeesRef.child(employee['key']).update({
-                        'id': idController.text,
-                        'name': nameController.text,
-                        'salary': double.tryParse(salaryController.text) ?? 0,
-                      });
-                      if (mounted) Navigator.pop(context);
-                    },
-                    child: const Text('Lưu'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _deleteEmployee(int index) {
-    final employee = employees[index];
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Xác nhận'),
-        content: const Text('Bạn có chắc muốn xóa nhân viên này?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await _employeesRef.child(employee['key']).remove();
-              if (mounted) Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Xóa'),
-          ),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Tính lương nhân viên'),
+        title: const Text('Quản lý Nhân viên'),
         backgroundColor: Colors.blue,
         foregroundColor: Colors.white,
       ),
-      body: ListView.builder(
-        itemCount: employees.length,
-        itemBuilder: (context, index) {
-          final employee = employees[index];
-          return Card(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: ListTile(
-              title: Text(
-                '${employee['id']} - ${employee['name']}',
-                style: const TextStyle(fontWeight: FontWeight.w500),
-              ),
-              subtitle: Text(
-                'Lương: ${employee['salary'].toStringAsFixed(1)}',
-                style: const TextStyle(color: Colors.grey),
-              ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            // Form nhập liệu
+            Form(
+              key: _formKey,
+              child: Column(
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.edit, color: Colors.blue),
-                    onPressed: () => _editEmployee(index),
+                  TextFormField(
+                    controller: _maNVController,
+                    decoration: const InputDecoration(labelText: 'Mã NV'),
+                    validator: (v) => v!.isEmpty ? 'Nhập mã NV' : null,
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.delete, color: Colors.red),
-                    onPressed: () => _deleteEmployee(index),
+                  TextFormField(
+                    controller: _hoTenController,
+                    decoration: const InputDecoration(labelText: 'Họ tên'),
+                    validator: (v) => v!.isEmpty ? 'Nhập họ tên' : null,
+                  ),
+                  TextFormField(
+                    controller: _luongCBController,
+                    decoration: const InputDecoration(labelText: 'Lương cơ bản'),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => v!.isEmpty ? 'Nhập lương CB' : null,
+                  ),
+                  TextFormField(
+                    controller: _heSoController,
+                    decoration: const InputDecoration(labelText: 'Hệ số'),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => v!.isEmpty ? 'Nhập hệ số' : null,
+                  ),
+                  TextFormField(
+                    controller: _phuCapController,
+                    decoration: const InputDecoration(labelText: 'Phụ cấp'),
+                    keyboardType: TextInputType.number,
+                    validator: (v) => v!.isEmpty ? 'Nhập phụ cấp' : null,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _isEditing ? _capNhatNhanVien : _themNhanVien,
+                    child: Text(_isEditing ? 'Cập nhật' : 'Thêm'),
                   ),
                 ],
               ),
             ),
-          );
-        },
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddEmployeeDialog,
-        backgroundColor: Colors.blue,
-        child: const Icon(Icons.add, color: Colors.white),
+            const SizedBox(height: 16),
+            // Danh sách nhân viên
+            Expanded(
+              child: StreamBuilder(
+                stream: _dbRef.onValue,
+                builder: (context, AsyncSnapshot<DatabaseEvent> snapshot) {
+                  if (snapshot.hasError) {
+                    return const Center(child: Text('Có lỗi xảy ra'));
+                  }
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  
+                  final data = snapshot.data?.snapshot.value;
+                  if (data == null) {
+                    return const Center(child: Text('Chưa có nhân viên'));
+                  }
+
+                  final Map<dynamic, dynamic> employees = data as Map;
+                  final List<MapEntry> employeeList = employees.entries.toList();
+
+                  return ListView.builder(
+                    itemCount: employeeList.length,
+                    itemBuilder: (context, index) {
+                      final entry = employeeList[index];
+                      final key = entry.key.toString();
+                      final emp = Map<String, dynamic>.from(entry.value);
+                      
+                      final luongCB = (emp['luongCB'] as num).toDouble();
+                      final heSo = (emp['heSo'] as num).toDouble();
+                      final phuCap = (emp['phuCap'] as num).toDouble();
+                      final luongTL = _tinhLuongThucLinh(luongCB, heSo, phuCap);
+
+                      return Card(
+                        margin: const EdgeInsets.symmetric(vertical: 4),
+                        child: ListTile(
+                          title: Text(
+                            emp['hoTen'].toString(),
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Mã NV: ${emp['maNV']}'),
+                              Text('Lương CB: $luongCB | Hệ số: $heSo |'),
+                              Text('Phụ cấp: $phuCap'),
+                              Text(
+                                '⭐ Lương thực lĩnh: $luongTL',
+                                style: const TextStyle(
+                                  color: Colors.orange,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.edit, color: Colors.blue),
+                                onPressed: () => _chonSuaNhanVien(key, emp),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                onPressed: () => _xoaNhanVien(key),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
