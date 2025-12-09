@@ -52,12 +52,12 @@ class MenuScreen extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.home),
-              title: const Text('Trang chủ'),
+              title: const Text('Trang chủ - Quân'),
               onTap: () => Navigator.pop(context),
             ),
             ListTile(
               leading: const Icon(Icons.people),
-              title: const Text('Quản lý nhân viên'),
+              title: const Text('Quản lý nhân viên - Quân'),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
